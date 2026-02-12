@@ -1,39 +1,71 @@
-**Welcome to your Base44 project** 
+# 🎥 Caption Studio
 
-**About**
+**AI-Powered Video Captioning & Editing Suite**
 
-View and Edit  your app on [Base44.com](http://Base44.com) 
+Caption Studio is a modern web application designed to help creators, marketers, and businesses automatically generate accurate captions for their videos. Built for speed and flexibility, it combines powerful AI transcription with a sleek, intuitive editor.
 
-This project contains everything you need to run your app locally.
+## 🚀 Features
 
-**Edit the code in your local development environment**
+* **⚡ AI Transcription:** Automatically convert speech to text with high accuracy.
+* **🎨 Visual Editor:** Real-time caption editing with support for custom fonts, colors, and animations.
+* **📱 Social Ready:** Optimized formats for Instagram Reels, TikTok, and YouTube Shorts.
+* **⚡ High Performance:** Built on Vite for lightning-fast load times and instant previews.
+* **🛠️ Modern UI:** Clean, accessible interface designed with Shadcn UI and Tailwind CSS.
 
-Any change pushed to the repo will also be reflected in the Base44 Builder.
+## 🛠️ Tech Stack
 
-**Prerequisites:** 
+* **Framework:** React + Vite
+* **Styling:** Tailwind CSS
+* **UI Components:** Shadcn UI
+* **State Management:** React Hooks
+* **Language:** JavaScript / JSX
 
-1. Clone the repository using the project's Git URL 
-2. Navigate to the project directory
-3. Install dependencies: `npm install`
-4. Create an `.env.local` file and set the right environment variables
+## 🏁 Getting Started
 
-```
-VITE_BASE44_APP_ID=your_app_id
-VITE_BASE44_APP_BASE_URL=your_backend_url
+Follow these steps to set up the project locally on your machine.
 
-e.g.
-VITE_BASE44_APP_ID=cbef744a8545c389ef439ea6
-VITE_BASE44_APP_BASE_URL=https://my-to-do-list-81bfaad7.base44.app
-```
+### Prerequisites
 
-Run the app: `npm run dev`
+* Node.js (v16 or higher)
+* npm or yarn
 
-**Publish your changes**
+### Installation
 
-Open [Base44.com](http://Base44.com) and click on Publish.
+1.  **Clone the repository**
+    ```bash
+    git clone [https://github.com/Abhisheknaidu144/caption-studio.git](https://github.com/Abhisheknaidu144/caption-studio.git)
+    cd caption-studio
+    ```
 
-**Docs & Support**
+2.  **Install dependencies**
+    ```bash
+    npm install
+    ```
 
-Documentation: [https://docs.base44.com/Integrations/Using-GitHub](https://docs.base44.com/Integrations/Using-GitHub)
+3.  **Start the development server**
+    ```bash
+    npm run dev
+    ```
 
-Support: [https://app.base44.com/support](https://app.base44.com/support)
+4.  **Open in Browser**
+    Visit `http://localhost:5173` to view the app.
+
+## 🤝 Contributing
+
+Contributions are welcome! If you have suggestions for improvements or new features, feel free to fork the repository and submit a pull request.
+
+1.  Fork the Project
+2.  Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3.  Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4.  Push to the Branch (`git push origin feature/AmazingFeature`)
+5.  Open a Pull Request
+
+## 👤 Author
+
+**Abhishek Naidu**
+* Founder, Skillshala & Caption Studio
+* GitHub: [@Abhisheknaidu144](https://github.com/Abhisheknaidu144)
+
+---
+
+*Built with ❤️ in India.*
