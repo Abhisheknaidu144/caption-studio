@@ -238,51 +238,9 @@ export default function Dashboard() {
       setFileId(fileId);
       setIsUploadModalOpen(false);
 
-      const maxDirectSize = 25 * 1024 * 1024;
-      let audioUrl = null;
-
-      if (file.size > maxDirectSize) {
-        setProcessingStatus('Extracting audio (this may take a moment)...');
-        console.log("Video too large, extracting audio with FFmpeg...");
-
-        try {
-          await loadFFmpeg((progress) => {
-            if (progress < 100) {
-              setProcessingStatus(`Loading audio processor: ${progress}%`);
-            }
-          });
-
-          setProcessingStatus('Extracting audio from video...');
-          const audioBlob = await extractAudio(file, (progress) => {
-            setProcessingStatus(`Extracting audio: ${progress}%`);
-          });
-
-          console.log(`Extracted audio size: ${audioBlob.size} bytes`);
-
-          setProcessingStatus('Uploading extracted audio...');
-          const audioFileId = `${user.id}/${Date.now()}-audio.wav`;
-          const { error: audioUploadError } = await supabase.storage
-            .from('videos')
-            .upload(audioFileId, audioBlob, {
-              cacheControl: '3600',
-              upsert: false,
-              contentType: 'audio/wav'
-            });
-
-          if (audioUploadError) {
-            throw new Error(`Audio upload failed: ${audioUploadError.message}`);
-          }
-
-          const { data: audioUrlData } = supabase.storage
-            .from('videos')
-            .getPublicUrl(audioFileId);
-
-          audioUrl = audioUrlData.publicUrl;
-        } catch (ffmpegError) {
-          console.error('FFmpeg extraction failed:', ffmpegError);
-          const errorMsg = ffmpegError.message || 'Unknown error';
-          throw new Error(`Audio extraction failed: ${errorMsg}. For large videos (over 25MB), please try a shorter video or compress the file.`);
-        }
+      const maxSize = 25 * 1024 * 1024;
+      if (file.size > maxSize) {
+        throw new Error(`Video is too large (${Math.round(file.size / 1024 / 1024)}MB). Maximum size is 25MB. Please use a shorter or compressed video.`);
       }
 
       setProcessingStatus('Generating captions with AI...');
@@ -297,8 +255,7 @@ export default function Dashboard() {
           'Authorization': `Bearer ${supabaseKey}`,
         },
         body: JSON.stringify({
-          videoUrl: audioUrl ? null : videoPublicUrl,
-          audioUrl: audioUrl,
+          videoUrl: videoPublicUrl,
           language: uploadSettings.language || 'English',
           userId: user.id
         })

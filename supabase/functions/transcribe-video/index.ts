@@ -78,8 +78,17 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    const mimeType = fileName.endsWith('.mp4') ? 'video/mp4' :
+                     fileName.endsWith('.wav') ? 'audio/wav' :
+                     fileName.endsWith('.mp3') ? 'audio/mpeg' : 'application/octet-stream';
+
+    const arrayBuffer = await mediaBlob.arrayBuffer();
+    const file = new File([arrayBuffer], fileName, { type: mimeType });
+
+    console.log(`Sending file: ${fileName}, type: ${mimeType}, size: ${file.size} bytes`);
+
     const formData = new FormData();
-    formData.append("file", mediaBlob, fileName);
+    formData.append("file", file);
     formData.append("model", "whisper-1");
     formData.append("response_format", "verbose_json");
     formData.append("timestamp_granularities[]", "segment");
