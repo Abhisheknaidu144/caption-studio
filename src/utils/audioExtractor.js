@@ -77,7 +77,7 @@ export const extractAudio = async (videoFile, onProgress) => {
     '-i', inputName,
     '-vn',
     '-acodec', 'libmp3lame',
-    '-q:a', '4',
+    '-b:a', '64k',
     '-ar', '16000',
     '-ac', '1',
     outputName

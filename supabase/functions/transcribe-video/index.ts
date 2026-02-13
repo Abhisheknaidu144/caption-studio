@@ -95,8 +95,19 @@ Deno.serve(async (req: Request) => {
 
     if (!whisperResponse.ok) {
       const errorText = await whisperResponse.text();
-      console.error("Whisper API error:", errorText);
-      throw new Error(`Whisper API error: ${whisperResponse.status}`);
+      console.error("Whisper API error:", whisperResponse.status, errorText);
+      let errorMessage = `Whisper API error: ${whisperResponse.status}`;
+      try {
+        const errorJson = JSON.parse(errorText);
+        if (errorJson.error?.message) {
+          errorMessage = errorJson.error.message;
+        }
+      } catch {
+        if (errorText) {
+          errorMessage = errorText.slice(0, 200);
+        }
+      }
+      throw new Error(errorMessage);
     }
 
     const transcription: WhisperResponse = await whisperResponse.json();
