@@ -9,7 +9,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Check, Crown, Zap, Loader2, AlertCircle } from 'lucide-react';
 import { initiateRazorpayPayment } from './RazorpayPayment';
-import { base44 } from '@/api/base44Client';
+import { supabase } from '@/lib/SupabaseAuthContext';
 
 const plans = [
   {
@@ -72,21 +72,36 @@ const plans = [
 export default function PricingModal({ isOpen, onClose, onSelectPlan, user, reason = 'upgrade' }) {
   const [processingPlan, setProcessingPlan] = useState(null);
 
+  const mapPlanIdToDbValue = (planId) => {
+    const mapping = {
+      'free_plan': 'free',
+      'weekly_creator': 'weekly',
+      'monthly_pro': 'monthly'
+    };
+    return mapping[planId] || 'free';
+  };
+
   const handlePayment = async (plan) => {
     setProcessingPlan(plan.id);
 
     try {
       // For free plan, skip Razorpay and directly activate
       if (plan.priceInPaise === 0) {
-        const expiryDate = new Date();
-        expiryDate.setDate(expiryDate.getDate() + 30);
+        const { error: updateError } = await supabase
+          .from('user_profiles')
+          .update({
+            subscription_plan: mapPlanIdToDbValue(plan.id),
+            credits_remaining: plan.credits,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', user.id);
 
-        await base44.auth.updateMe({
-          subscription_plan: plan.id,
-          credits_remaining: plan.credits,
-          plan_expiry_date: expiryDate.toISOString(),
-          daily_usage_count: 0
-        });
+        if (updateError) {
+          console.error('Error updating subscription:', updateError);
+          alert(`Error activating plan: ${updateError.message}`);
+          setProcessingPlan(null);
+          return;
+        }
 
         alert(`✅ Free plan activated! You now have ${plan.credits} credits.`);
         setProcessingPlan(null);
@@ -105,19 +120,42 @@ export default function PricingModal({ isOpen, onClose, onSelectPlan, user, reas
         userName: user?.full_name,
         onSuccess: async (paymentData) => {
           try {
-            const expiryDate = new Date();
-            if (plan.id === 'weekly_creator') {
-              expiryDate.setDate(expiryDate.getDate() + 7);
-            } else if (plan.id === 'monthly_pro') {
-              expiryDate.setDate(expiryDate.getDate() + 30);
+            const { data: currentProfile } = await supabase
+              .from('user_profiles')
+              .select('total_credits_purchased')
+              .eq('id', user.id)
+              .single();
+
+            const { error: updateError } = await supabase
+              .from('user_profiles')
+              .update({
+                subscription_plan: mapPlanIdToDbValue(plan.id),
+                credits_remaining: plan.credits,
+                total_credits_purchased: (currentProfile?.total_credits_purchased || 0) + plan.credits,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', user.id);
+
+            if (updateError) {
+              console.error('Error updating subscription:', updateError);
+              alert('Payment received but failed to update subscription. Please contact support.');
+              setProcessingPlan(null);
+              return;
             }
 
-            await base44.auth.updateMe({
-              subscription_plan: plan.id,
-              credits_remaining: plan.credits,
-              plan_expiry_date: expiryDate.toISOString(),
-              daily_usage_count: 0
-            });
+            const dbPlanType = mapPlanIdToDbValue(plan.id);
+            if (dbPlanType !== 'free') {
+              await supabase.from('payment_transactions').insert({
+                user_id: user.id,
+                razorpay_payment_id: paymentData?.razorpay_payment_id,
+                razorpay_order_id: paymentData?.razorpay_order_id,
+                razorpay_signature: paymentData?.razorpay_signature,
+                amount: plan.priceInPaise / 100,
+                status: 'success',
+                plan_type: dbPlanType,
+                credits_added: plan.credits
+              });
+            }
 
             alert(`✅ Payment successful! You now have ${plan.credits} credits.`);
             setProcessingPlan(null);
