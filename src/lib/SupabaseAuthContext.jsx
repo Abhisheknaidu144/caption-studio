@@ -57,27 +57,44 @@ export const AuthProvider = ({ children }) => {
 
       if (error && error.code !== 'PGRST116') {
         console.error('Error fetching user profile:', error);
+        setIsLoading(false);
+        return;
       }
 
       if (data) {
         setCredits(data.credits_remaining);
         setSubscriptionPlan(data.subscription_plan);
       } else {
-        const { data: newProfile, error: insertError } = await supabase
+        const { data: newProfile, error: upsertError } = await supabase
           .from('user_profiles')
-          .insert([
+          .upsert(
             {
               id: userId,
               email: userEmail,
               credits_remaining: 3,
               subscription_plan: 'free',
             },
-          ])
+            { onConflict: 'id' }
+          )
           .select()
           .single();
 
-        if (insertError) {
-          console.error('Error creating user profile:', insertError);
+        if (upsertError) {
+          console.error('Error creating user profile:', upsertError);
+
+          const { data: retryData } = await supabase
+            .from('user_profiles')
+            .select('credits_remaining, subscription_plan')
+            .eq('id', userId)
+            .maybeSingle();
+
+          if (retryData) {
+            setCredits(retryData.credits_remaining);
+            setSubscriptionPlan(retryData.subscription_plan);
+          } else {
+            setCredits(0);
+            setSubscriptionPlan('free');
+          }
         } else {
           setCredits(3);
           setSubscriptionPlan('free');
