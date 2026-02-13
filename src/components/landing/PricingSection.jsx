@@ -2,8 +2,6 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Check, Zap, Crown } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { createPageUrl } from '@/utils';
 
 const plans = [
   {
@@ -105,18 +103,16 @@ export default function PricingSection({ onSelectPlan }) {
                 ))}
               </ul>
               
-              <Link to={createPageUrl('Dashboard')}>
-                <Button
-                  onClick={() => onSelectPlan?.(plan.name)}
-                  className={`w-full py-6 rounded-xl ${
-                    plan.popular
-                      ? 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white'
-                      : 'bg-white/10 hover:bg-white/20 text-white'
-                  }`}
-                >
-                  {plan.cta}
-                </Button>
-              </Link>
+              <Button
+                onClick={() => onSelectPlan?.(plan.name)}
+                className={`w-full py-6 rounded-xl ${
+                  plan.popular
+                    ? 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white'
+                    : 'bg-white/10 hover:bg-white/20 text-white'
+                }`}
+              >
+                {plan.cta}
+              </Button>
             </motion.div>
           ))}
         </div>

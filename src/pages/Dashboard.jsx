@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Loader2, Upload, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useAuth } from '@/lib/SupabaseAuthContext';
+import { useAuth, supabase } from '@/lib/SupabaseAuthContext';
 
 // UI Components
 import DashboardHeader from '@/components/dashboard/DashboardHeader';
@@ -188,7 +188,6 @@ export default function Dashboard() {
     }
   }, [videoUrl, fileId, captions, captionStyle, projectId, settings, duration, isUploadModalOpen, isLoaded]);
 
-  // --- MODIFIED UPLOAD HANDLER (PYTHON BACKEND) ---
   const handleUpload = async (file, uploadSettings) => {
     if (!user) {
       setIsUploadModalOpen(false);
@@ -211,34 +210,45 @@ export default function Dashboard() {
     setSettings(uploadSettings);
 
     try {
-      // 1. Upload the video file to Python Backend
-      const formData = new FormData();
-      formData.append('file', file);
+      const fileId = `${user.id}/${Date.now()}-${file.name}`;
 
-      console.log("Uploading to /api/upload...");
-      const uploadRes = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-      if (!uploadRes.ok) throw new Error("Upload failed. Is the Python backend running?");
-      const uploadData = await uploadRes.json();
+      console.log("Uploading to Supabase Storage...");
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('videos')
+        .upload(fileId, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
 
-      // Set generating TRUE first (or simultaneously) so we don't flash the editor
+      if (uploadError) {
+        throw new Error(`Upload failed: ${uploadError.message}`);
+      }
+
+      const { data: urlData } = supabase.storage
+        .from('videos')
+        .getPublicUrl(fileId);
+
+      const videoPublicUrl = urlData.publicUrl;
+
       setIsGenerating(true);
-      setVideoUrl(uploadData.raw_url);
-      setFileId(uploadData.file_id);
+      setVideoUrl(videoPublicUrl);
+      setFileId(fileId);
       setIsUploadModalOpen(false);
 
-      // 2. Generate captions using Python Backend (Whisper + GPT)
-      console.log("Processing with /api/process...");
+      console.log("Processing with Edge Function...");
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-      const processRes = await fetch('/api/process', {
+      const processRes = await fetch(`${supabaseUrl}/functions/v1/transcribe-video`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseKey}`,
+        },
         body: JSON.stringify({
-          file_id: uploadData.file_id,
+          videoUrl: videoPublicUrl,
           language: uploadSettings.language || 'English',
-          user_id: user.id
+          userId: user.id
         })
       });
 
@@ -248,7 +258,6 @@ export default function Dashboard() {
          throw new Error(processData.error || "AI Processing Failed");
       }
 
-      // Ensure we have valid captions data
       const captionsData = processData.captions || [];
       const generatedCaptions = captionsData.map((cap, idx) => ({
         text: cap?.text || '',
@@ -258,13 +267,11 @@ export default function Dashboard() {
       }));
       setCaptions(generatedCaptions);
 
-      // Store target language in caption style for export
       setCaptionStyle(prev => ({
         ...prev,
         target_language: uploadSettings.language || 'English'
       }));
 
-      // Save initial history
       setHistory([{
         captions: JSON.parse(JSON.stringify(generatedCaptions)),
         captionStyle: JSON.parse(JSON.stringify(captionStyle))

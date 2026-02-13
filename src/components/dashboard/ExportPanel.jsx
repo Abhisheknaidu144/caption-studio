@@ -1,15 +1,10 @@
 import React, { useState } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from '@/components/ui/button';
-import { Download, FileText, Copy, Check, FileJson, Sparkles, Video } from 'lucide-react';
+import { FileText, Copy, Check, FileJson, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { Progress } from "@/components/ui/progress";
-
-export default function ExportPanel({ open, onClose, captions, fileId, captionStyle, userId }) {
+export default function ExportPanel({ open, onClose, captions }) {
   const [copied, setCopied] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [statusMessage, setStatusMessage] = useState('');
 
   // --- HELPER FUNCTIONS FOR TEXT EXPORT ---
   const generateSRT = () => {
@@ -60,101 +55,11 @@ export default function ExportPanel({ open, onClose, captions, fileId, captionSt
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // --- REAL BACKEND EXPORT LOGIC ---
-  const handleExportVideo = async (quality) => {
-    if (!fileId) {
-      alert("No video file detected. Please upload a video first.");
-      return;
-    }
-
-    if (!userId) {
-      alert("Please log in to export videos.");
-      return;
-    }
-
-    setIsExporting(true);
-    setProgress(10);
-    setStatusMessage('Initializing Render Engine...');
-
-    try {
-      // 1. Send data to Python Backend
-      const response = await fetch('/api/export', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          file_id: fileId,
-          captions: captions,
-          style: captionStyle || {},
-          user_id: userId,
-          export_quality: quality
-        })
-      });
-
-      if (!response.ok) {
-        if (response.status === 402) {
-          const errorData = await response.json();
-          alert(errorData.detail || 'Insufficient credits. Please purchase more credits.');
-          setIsExporting(false);
-          return;
-        }
-        throw new Error('Server connection failed');
-      }
-
-      setStatusMessage('Rendering Frames (this may take a moment)...');
-      setProgress(50);
-
-      const data = await response.json();
-
-      if (!data.success) {
-         throw new Error(data.error || 'Render failed on server');
-      }
-
-      // 2. Success! Trigger Download
-      setProgress(100);
-      setStatusMessage('Download starting...');
-      const downloadUrl = data.video_url; // Use video_url as returned by main.py
-
-      // Create hidden link to download
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = `caption_studio_${fileId}.mp4`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      // Reset UI after short delay
-      setTimeout(() => {
-        setIsExporting(false);
-        onClose();
-        alert("Video Exported Successfully!");
-      }, 1000);
-
-    } catch (error) {
-      console.error("Export error:", error);
-      alert(`Export Failed: ${error.message}`);
-      setIsExporting(false);
-    }
-  };
-
   const exportOptions = [
-    {
-      icon: Video,
-      title: 'Export Video (1080p)',
-      description: 'High quality MP4 render',
-      action: () => handleExportVideo('1080p'),
-      gradient: 'from-orange-500 to-red-500'
-    },
-    {
-      icon: Video,
-      title: 'Export Video (720p)',
-      description: 'Standard HD MP4 render',
-      action: () => handleExportVideo('720p'),
-      gradient: 'from-yellow-500 to-orange-500'
-    },
     {
       icon: FileText,
       title: 'SRT File',
-      description: 'Standard subtitle format',
+      description: 'Standard subtitle format for video editors',
       action: handleDownloadSRT,
       gradient: 'from-purple-500 to-blue-500'
     },
@@ -183,51 +88,34 @@ export default function ExportPanel({ open, onClose, captions, fileId, captionSt
           </SheetTitle>
         </SheetHeader>
 
-        {isExporting ? (
-          <div className="mt-8 p-6 rounded-xl bg-zinc-800/50 border border-white/10 text-center space-y-4">
-            <div className="relative w-16 h-16 mx-auto">
-              <div className="absolute inset-0 rounded-full border-2 border-white/10"></div>
-              <div className="absolute inset-0 rounded-full border-t-2 border-purple-500 animate-spin"></div>
-              <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white">
-                {Math.round(progress)}%
+        <div className="mt-8 space-y-4">
+          {exportOptions.map((option, idx) => (
+            <motion.button
+              key={idx}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.1 }}
+              onClick={option.action}
+              className="w-full p-4 rounded-xl bg-white/[0.02] border border-white/5 hover:border-white/10 transition-all flex items-center gap-4 group"
+            >
+              <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${option.gradient} p-0.5`}>
+                <div className="w-full h-full rounded-xl bg-zinc-900 flex items-center justify-center group-hover:bg-zinc-800 transition-colors">
+                  <option.icon className="w-5 h-5 text-white" />
+                </div>
               </div>
-            </div>
-            <div>
-              <h3 className="text-lg font-medium text-white mb-1">Rendering Video</h3>
-              <p className="text-sm text-purple-300 animate-pulse">{statusMessage}</p>
-            </div>
-            <Progress value={progress} className="h-2 bg-zinc-700" indicatorClassName="bg-gradient-to-r from-purple-500 to-blue-500" />
-          </div>
-        ) : (
-          <div className="mt-8 space-y-4">
-            {exportOptions.map((option, idx) => (
-              <motion.button
-                key={idx}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.1 }}
-                onClick={option.action}
-                className="w-full p-4 rounded-xl bg-white/[0.02] border border-white/5 hover:border-white/10 transition-all flex items-center gap-4 group"
-              >
-                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${option.gradient} p-0.5`}>
-                  <div className="w-full h-full rounded-xl bg-zinc-900 flex items-center justify-center group-hover:bg-zinc-800 transition-colors">
-                    <option.icon className="w-5 h-5 text-white" />
-                  </div>
-                </div>
-                <div className="text-left">
-                  <p className="text-white font-medium">{option.title}</p>
-                  <p className="text-sm text-gray-500">{option.description}</p>
-                </div>
-              </motion.button>
-            ))}
-          </div>
-        )}
+              <div className="text-left">
+                <p className="text-white font-medium">{option.title}</p>
+                <p className="text-sm text-gray-500">{option.description}</p>
+              </div>
+            </motion.button>
+          ))}
+        </div>
 
         {/* Coming Soon */}
         <div className="mt-8 pt-6 border-t border-white/5">
           <h4 className="text-sm font-medium text-gray-500 mb-4">Coming Soon</h4>
           <div className="space-y-3">
-            {['CapCut Export', 'Premiere Pro Export', 'Direct Upload'].map((feature, idx) => (
+            {['Video Export (MP4 with captions)', 'CapCut Export', 'Premiere Pro Export', 'Direct Upload'].map((feature, idx) => (
               <div 
                 key={idx}
                 className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.02] border border-white/5 opacity-50"

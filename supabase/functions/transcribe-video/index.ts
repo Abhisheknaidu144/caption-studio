@@ -1,0 +1,179 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+};
+
+interface TranscriptionSegment {
+  id: number;
+  text: string;
+  start: number;
+  end: number;
+}
+
+interface WhisperResponse {
+  text: string;
+  segments?: TranscriptionSegment[];
+}
+
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      status: 200,
+      headers: corsHeaders,
+    });
+  }
+
+  try {
+    const { videoUrl, language = "English", userId } = await req.json();
+
+    if (!videoUrl) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Video URL is required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
+    if (!openaiApiKey) {
+      return new Response(
+        JSON.stringify({ success: false, error: "OpenAI API key not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(`Downloading video from: ${videoUrl}`);
+    const videoResponse = await fetch(videoUrl);
+    if (!videoResponse.ok) {
+      throw new Error(`Failed to download video: ${videoResponse.status}`);
+    }
+
+    const videoBlob = await videoResponse.blob();
+    console.log(`Video size: ${videoBlob.size} bytes`);
+
+    const formData = new FormData();
+    formData.append("file", videoBlob, "video.mp4");
+    formData.append("model", "whisper-1");
+    formData.append("response_format", "verbose_json");
+    formData.append("timestamp_granularities[]", "segment");
+
+    console.log("Sending to Whisper API...");
+    const whisperResponse = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${openaiApiKey}`,
+      },
+      body: formData,
+    });
+
+    if (!whisperResponse.ok) {
+      const errorText = await whisperResponse.text();
+      console.error("Whisper API error:", errorText);
+      throw new Error(`Whisper API error: ${whisperResponse.status}`);
+    }
+
+    const transcription: WhisperResponse = await whisperResponse.json();
+    console.log("Transcription received");
+
+    let captions: Array<{id: string; text: string; start_time: number; end_time: number}> = [];
+
+    if (transcription.segments && transcription.segments.length > 0) {
+      for (const seg of transcription.segments) {
+        let text = seg.text.trim();
+
+        if (language.toLowerCase() !== "english" && text) {
+          try {
+            const translationResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${openaiApiKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                model: "gpt-4o-mini",
+                messages: [
+                  {
+                    role: "system",
+                    content: `You are a professional subtitle translator. Translate the following English text to ${language}. Return ONLY the translated text without quotes or explanations.`
+                  },
+                  {
+                    role: "user",
+                    content: text
+                  }
+                ],
+                temperature: 0.3
+              }),
+            });
+
+            if (translationResponse.ok) {
+              const translationData = await translationResponse.json();
+              text = translationData.choices[0]?.message?.content?.trim() || text;
+            }
+          } catch (e) {
+            console.error("Translation error:", e);
+          }
+        }
+
+        const words = text.split(/\s+/);
+        const duration = seg.end - seg.start;
+
+        if (words.length <= 5) {
+          captions.push({
+            id: `${Date.now()}-${seg.id}`,
+            text: text,
+            start_time: seg.start,
+            end_time: seg.end
+          });
+        } else {
+          const chunks: string[][] = [];
+          for (let i = 0; i < words.length; i += 4) {
+            chunks.push(words.slice(i, i + 4));
+          }
+
+          const chunkDuration = duration / chunks.length;
+          chunks.forEach((chunk, idx) => {
+            captions.push({
+              id: `${Date.now()}-${seg.id}-${idx}`,
+              text: chunk.join(" "),
+              start_time: seg.start + (idx * chunkDuration),
+              end_time: seg.start + ((idx + 1) * chunkDuration)
+            });
+          });
+        }
+      }
+    } else if (transcription.text) {
+      captions.push({
+        id: `${Date.now()}-0`,
+        text: transcription.text,
+        start_time: 0,
+        end_time: 10
+      });
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        captions,
+        raw_text: transcription.text
+      }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      }
+    );
+
+  } catch (error) {
+    console.error("Error:", error);
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: error.message || "Failed to transcribe video"
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      }
+    );
+  }
+});
