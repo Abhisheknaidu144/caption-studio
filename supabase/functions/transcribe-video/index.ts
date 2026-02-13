@@ -6,155 +6,123 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-interface TranscriptionSegment {
-  id: number;
-  text: string;
-  start: number;
-  end: number;
-}
-
-interface WhisperResponse {
-  text: string;
-  segments?: TranscriptionSegment[];
+function jsonResponse(data: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 }
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      status: 200,
-      headers: corsHeaders,
-    });
+    return new Response(null, { status: 200, headers: corsHeaders });
   }
 
   try {
-    const { videoUrl, audioUrl, language = "English", userId } = await req.json();
+    const { videoUrl, language = "English", userId } = await req.json();
 
-    if (!videoUrl && !audioUrl) {
-      return new Response(
-        JSON.stringify({ success: false, error: "Video or audio URL is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (!videoUrl) {
+      return jsonResponse({ success: false, error: "Video URL is required" }, 400);
     }
 
     const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
     if (!openaiApiKey) {
-      return new Response(
-        JSON.stringify({ success: false, error: "OpenAI API key not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ success: false, error: "OpenAI API key not configured" }, 500);
     }
 
-    let mediaBlob: Blob;
-    let fileName: string;
-
-    if (audioUrl) {
-      console.log(`Downloading audio from: ${audioUrl}`);
-      const audioResponse = await fetch(audioUrl);
-      if (!audioResponse.ok) {
-        throw new Error(`Failed to download audio: ${audioResponse.status}`);
-      }
-      mediaBlob = await audioResponse.blob();
-      fileName = "audio.wav";
-      console.log(`Audio size: ${mediaBlob.size} bytes`);
-    } else {
-      console.log(`Downloading video from: ${videoUrl}`);
-      const videoResponse = await fetch(videoUrl);
-      if (!videoResponse.ok) {
-        throw new Error(`Failed to download video: ${videoResponse.status}`);
-      }
-      mediaBlob = await videoResponse.blob();
-      fileName = "video.mp4";
-      console.log(`Video size: ${mediaBlob.size} bytes`);
+    console.log(`Downloading video from: ${videoUrl}`);
+    const videoResponse = await fetch(videoUrl);
+    if (!videoResponse.ok) {
+      throw new Error(`Failed to download video: ${videoResponse.status}`);
     }
+
+    const videoArrayBuffer = await videoResponse.arrayBuffer();
+    const videoSize = videoArrayBuffer.byteLength;
+    console.log(`Video downloaded: ${videoSize} bytes`);
 
     const maxSize = 25 * 1024 * 1024;
-    if (mediaBlob.size > maxSize) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: `File is too large (${Math.round(mediaBlob.size / 1024 / 1024)}MB). Maximum size is 25MB. Please use a shorter video or try again.`
-        }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (videoSize > maxSize) {
+      return jsonResponse({
+        success: false,
+        error: `File is too large (${Math.round(videoSize / 1024 / 1024)}MB). Maximum is 25MB.`
+      }, 400);
     }
 
-    const mimeType = fileName.endsWith('.mp4') ? 'video/mp4' :
-                     fileName.endsWith('.wav') ? 'audio/wav' :
-                     fileName.endsWith('.mp3') ? 'audio/mpeg' : 'application/octet-stream';
+    const urlLower = videoUrl.toLowerCase();
+    let ext = "mp4";
+    let mimeType = "video/mp4";
+    if (urlLower.includes(".webm")) { ext = "webm"; mimeType = "video/webm"; }
+    else if (urlLower.includes(".mov")) { ext = "mov"; mimeType = "video/quicktime"; }
+    else if (urlLower.includes(".avi")) { ext = "avi"; mimeType = "video/x-msvideo"; }
+    else if (urlLower.includes(".mp3")) { ext = "mp3"; mimeType = "audio/mpeg"; }
+    else if (urlLower.includes(".wav")) { ext = "wav"; mimeType = "audio/wav"; }
+    else if (urlLower.includes(".m4a")) { ext = "m4a"; mimeType = "audio/mp4"; }
 
-    const arrayBuffer = await mediaBlob.arrayBuffer();
-    const file = new File([arrayBuffer], fileName, { type: mimeType });
-
-    console.log(`Sending file: ${fileName}, type: ${mimeType}, size: ${file.size} bytes`);
-
+    const blob = new Blob([videoArrayBuffer], { type: mimeType });
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", blob, `video.${ext}`);
     formData.append("model", "whisper-1");
     formData.append("response_format", "verbose_json");
     formData.append("timestamp_granularities[]", "segment");
 
-    console.log("Sending to Whisper API...");
+    console.log(`Sending to Whisper: type=${mimeType}, ext=${ext}, size=${videoSize}`);
     const whisperResponse = await fetch("https://api.openai.com/v1/audio/transcriptions", {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${openaiApiKey}`,
-      },
+      headers: { "Authorization": `Bearer ${openaiApiKey}` },
       body: formData,
     });
 
     if (!whisperResponse.ok) {
       const errorText = await whisperResponse.text();
-      console.error("Whisper API error:", whisperResponse.status, errorText);
+      console.error("Whisper error:", whisperResponse.status, errorText);
       let errorMessage = `Whisper API error: ${whisperResponse.status}`;
       try {
         const errorJson = JSON.parse(errorText);
-        if (errorJson.error?.message) {
-          errorMessage = errorJson.error.message;
-        }
-      } catch {
-        if (errorText) {
-          errorMessage = errorText.slice(0, 200);
-        }
-      }
+        if (errorJson.error?.message) errorMessage = errorJson.error.message;
+      } catch { /* use default */ }
       throw new Error(errorMessage);
     }
 
-    const transcription: WhisperResponse = await whisperResponse.json();
-    console.log("Transcription received");
+    const transcription = await whisperResponse.json();
+    console.log(`Transcription received: ${transcription.segments?.length || 0} segments`);
 
-    let captions: Array<{id: string; text: string; start_time: number; end_time: number}> = [];
+    const captions: Array<{id: string; text: string; start_time: number; end_time: number}> = [];
 
     if (transcription.segments && transcription.segments.length > 0) {
       for (const seg of transcription.segments) {
-        let text = seg.text.trim();
+        let text = (seg.text || "").trim();
+        if (!text) continue;
 
-        if (language.toLowerCase() !== "english" && text) {
+        const start: number = seg.start || 0;
+        const end: number = seg.end || 0;
+
+        if (language.toLowerCase() !== "english") {
           try {
-            const translationResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+            const translationRes = await fetch("https://api.openai.com/v1/chat/completions", {
               method: "POST",
               headers: {
                 "Authorization": `Bearer ${openaiApiKey}`,
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({
-                model: "gpt-4o-mini",
+                model: "gpt-4o",
                 messages: [
                   {
                     role: "system",
-                    content: `You are a professional subtitle translator. Translate the following English text to ${language}. Return ONLY the translated text without quotes or explanations.`
+                    content: `You are a professional subtitle translator specializing in ${language}. Translate the following English text to ${language}. For regional Indian languages (Hindi, Tamil, Telugu, Bengali, Marathi, Punjabi, Gujarati, Kannada, Malayalam, Odia, Urdu), use natural, conversational language that matches the speaking style. Keep translations concise and subtitle-friendly (max 2 lines). Preserve the emotional tone and cultural context. Return ONLY the translated text without quotes, explanations, or meta-commentary.`
                   },
-                  {
-                    role: "user",
-                    content: text
-                  }
+                  { role: "user", content: text }
                 ],
                 temperature: 0.3
               }),
             });
 
-            if (translationResponse.ok) {
-              const translationData = await translationResponse.json();
-              text = translationData.choices[0]?.message?.content?.trim() || text;
+            if (translationRes.ok) {
+              const translationData = await translationRes.json();
+              const translated = translationData.choices?.[0]?.message?.content?.trim();
+              if (translated) {
+                text = translated.replace(/^["']|["']$/g, "");
+              }
             }
           } catch (e) {
             console.error("Translation error:", e);
@@ -162,30 +130,36 @@ Deno.serve(async (req: Request) => {
         }
 
         const words = text.split(/\s+/);
-        const duration = seg.end - seg.start;
+        const duration = end - start;
+        const wordsPerMinute = duration > 0 ? (words.length / duration) * 60 : 0;
 
-        if (words.length <= 5) {
+        let wordsPerCaption = Math.min(3, words.length);
+        if (wordsPerMinute > 180 || words.length > 5) {
+          wordsPerCaption = Math.min(5, Math.max(3, Math.floor(words.length / 2)));
+        } else if (wordsPerMinute < 60 && words.length === 1) {
+          wordsPerCaption = 1;
+        }
+
+        if (words.length <= wordsPerCaption) {
           captions.push({
-            id: `${Date.now()}-${seg.id}`,
-            text: text,
-            start_time: seg.start,
-            end_time: seg.end
+            id: `${Date.now()}-${seg.id || captions.length}`,
+            text,
+            start_time: start,
+            end_time: end
           });
         } else {
-          const chunks: string[][] = [];
-          for (let i = 0; i < words.length; i += 4) {
-            chunks.push(words.slice(i, i + 4));
-          }
-
-          const chunkDuration = duration / chunks.length;
-          chunks.forEach((chunk, idx) => {
+          const timePerWord = duration / words.length;
+          for (let i = 0; i < words.length; i += wordsPerCaption) {
+            const chunk = words.slice(i, i + wordsPerCaption);
+            const chunkStart = start + (i * timePerWord);
+            const chunkEnd = start + ((i + chunk.length) * timePerWord);
             captions.push({
-              id: `${Date.now()}-${seg.id}-${idx}`,
+              id: `${Date.now()}-${seg.id || captions.length}-${i}`,
               text: chunk.join(" "),
-              start_time: seg.start + (idx * chunkDuration),
-              end_time: seg.start + ((idx + 1) * chunkDuration)
+              start_time: chunkStart,
+              end_time: Math.min(chunkEnd, end)
             });
-          });
+          }
         }
       }
     } else if (transcription.text) {
@@ -197,28 +171,17 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        captions,
-        raw_text: transcription.text
-      }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
-      }
-    );
+    return jsonResponse({
+      success: true,
+      captions,
+      raw_text: transcription.text
+    });
 
   } catch (error) {
     console.error("Error:", error);
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: error.message || "Failed to transcribe video"
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
-      }
-    );
+    return jsonResponse({
+      success: false,
+      error: error.message || "Failed to transcribe video"
+    }, 500);
   }
 });
