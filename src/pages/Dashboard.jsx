@@ -17,6 +17,7 @@ import SidebarNav from '@/components/dashboard/SidebarNav';
 import UploadModal from '@/components/dashboard/UploadModal';
 import ExportPanel from '@/components/dashboard/ExportPanel';
 import PricingModal from '@/components/dashboard/PricingModal';
+import AuthModal from '@/components/dashboard/AuthModal';
 import { extractWaveformData } from '@/components/dashboard/audioUtils';
 
 // Helper for retrying operations
@@ -66,6 +67,7 @@ export default function Dashboard() {
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isExportPanelOpen, setIsExportPanelOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -188,7 +190,8 @@ export default function Dashboard() {
   // --- MODIFIED UPLOAD HANDLER (PYTHON BACKEND) ---
   const handleUpload = async (file, uploadSettings) => {
     if (!user) {
-      alert('Please log in to upload videos');
+      setIsUploadModalOpen(false);
+      setIsAuthModalOpen(true);
       return;
     }
 
@@ -373,7 +376,7 @@ export default function Dashboard() {
 
   return (
     <div className="h-screen max-h-screen bg-[#0a0a0a] flex flex-col overflow-hidden">
-      <DashboardHeader 
+      <DashboardHeader
         onUploadClick={() => setIsUploadModalOpen(true)}
         onExportClick={() => setIsExportPanelOpen(true)}
         onSaveClick={handleSave}
@@ -385,6 +388,7 @@ export default function Dashboard() {
         canUndo={historyIndex > 0}
         canRedo={historyIndex < history.length - 1}
         onRefresh={handleRefresh}
+        onLoginClick={() => setIsAuthModalOpen(true)}
       />
 
       {/* Main content */}
@@ -576,6 +580,11 @@ export default function Dashboard() {
         onClose={() => setIsPricingModalOpen(false)}
         onSelectPlan={handleSelectPlan}
         user={user}
+      />
+
+      <AuthModal
+        open={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
       />
 
       {/* Custom scrollbar styles */}

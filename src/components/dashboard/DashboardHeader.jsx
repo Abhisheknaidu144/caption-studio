@@ -2,21 +2,24 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Button } from '@/components/ui/button';
-import { 
-  Captions, 
-  Upload, 
-  Download, 
+import { useAuth } from '@/lib/SupabaseAuthContext';
+import {
+  Captions,
+  Upload,
+  Download,
   Save,
   Home,
   Loader2,
   Undo,
   Redo,
-  RotateCw
+  RotateCw,
+  LogIn,
+  User,
+  Coins
 } from 'lucide-react';
-// UserAccountButton moved to Sidebar
 
-export default function DashboardHeader({ 
-  onUploadClick, 
+export default function DashboardHeader({
+  onUploadClick,
   onExportClick,
   onSaveClick,
   isSaving,
@@ -26,8 +29,10 @@ export default function DashboardHeader({
   onRedo,
   canUndo,
   canRedo,
-  onRefresh
+  onRefresh,
+  onLoginClick
 }) {
+  const { user, credits, signOut } = useAuth();
   return (
     <header className="h-16 bg-zinc-950 border-b border-white/5 flex items-center justify-between px-4 lg:px-6">
       {/* Logo */}
@@ -42,6 +47,32 @@ export default function DashboardHeader({
       
       {/* Actions */}
       <div className="flex items-center gap-2 sm:gap-3">
+        {/* User Section */}
+        {user ? (
+          <div className="flex items-center gap-3 mr-2 border-r border-white/10 pr-3">
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-purple-600/20 border border-purple-600/30 rounded-lg">
+              <Coins className="w-4 h-4 text-purple-400" />
+              <span className="text-sm font-medium text-white">{credits || 0}</span>
+            </div>
+            <button
+              onClick={signOut}
+              className="text-xs text-gray-400 hover:text-white transition-colors"
+            >
+              Sign Out
+            </button>
+          </div>
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onLoginClick}
+            className="text-gray-400 hover:text-white mr-2"
+          >
+            <LogIn className="w-4 h-4 mr-2" />
+            <span className="hidden sm:inline">Sign In</span>
+          </Button>
+        )}
+
         {hasVideo && (
           <div className="flex items-center gap-1 mr-2 border-r border-white/10 pr-3">
             <Button
