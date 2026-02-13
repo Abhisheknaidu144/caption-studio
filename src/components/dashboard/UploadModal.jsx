@@ -67,19 +67,18 @@ export default function UploadModal({
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    
+
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
       if (file.type.startsWith('video/')) {
-        // Check file size (100MB = 104857600 bytes)
-        const maxSize = 100 * 1024 * 1024;
+        const maxSize = 50 * 1024 * 1024;
         const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
-        
+
         if (file.size > maxSize) {
-          setFileSizeError(`File size (${fileSizeMB}MB) exceeds 100MB limit.`);
+          setFileSizeError(`File size (${fileSizeMB}MB) exceeds 50MB limit.`);
           return;
         }
-        
+
         setFileSizeError(null);
         setSelectedFile(file);
         setStep(2);
@@ -90,16 +89,15 @@ export default function UploadModal({
   const handleFileSelect = (e) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      
-      // Check file size (100MB = 104857600 bytes)
-      const maxSize = 100 * 1024 * 1024;
+
+      const maxSize = 50 * 1024 * 1024;
       const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
-      
+
       if (file.size > maxSize) {
-        setFileSizeError(`File size (${fileSizeMB}MB) exceeds 100MB limit.`);
+        setFileSizeError(`File size (${fileSizeMB}MB) exceeds 50MB limit.`);
         return;
       }
-      
+
       setFileSizeError(null);
       setSelectedFile(file);
       setStep(2);
@@ -178,7 +176,7 @@ export default function UploadModal({
                     MP4, MOV, WebM
                   </span>
                   <span>15-90 seconds</span>
-                  <span>Max 100MB</span>
+                  <span>Max 50MB</span>
                 </div>
               </div>
               

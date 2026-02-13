@@ -27,11 +27,11 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { videoUrl, language = "English", userId } = await req.json();
+    const { videoUrl, audioUrl, language = "English", userId } = await req.json();
 
-    if (!videoUrl) {
+    if (!videoUrl && !audioUrl) {
       return new Response(
-        JSON.stringify({ success: false, error: "Video URL is required" }),
+        JSON.stringify({ success: false, error: "Video or audio URL is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -44,28 +44,42 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log(`Downloading video from: ${videoUrl}`);
-    const videoResponse = await fetch(videoUrl);
-    if (!videoResponse.ok) {
-      throw new Error(`Failed to download video: ${videoResponse.status}`);
+    let mediaBlob: Blob;
+    let fileName: string;
+
+    if (audioUrl) {
+      console.log(`Downloading audio from: ${audioUrl}`);
+      const audioResponse = await fetch(audioUrl);
+      if (!audioResponse.ok) {
+        throw new Error(`Failed to download audio: ${audioResponse.status}`);
+      }
+      mediaBlob = await audioResponse.blob();
+      fileName = "audio.mp3";
+      console.log(`Audio size: ${mediaBlob.size} bytes`);
+    } else {
+      console.log(`Downloading video from: ${videoUrl}`);
+      const videoResponse = await fetch(videoUrl);
+      if (!videoResponse.ok) {
+        throw new Error(`Failed to download video: ${videoResponse.status}`);
+      }
+      mediaBlob = await videoResponse.blob();
+      fileName = "video.mp4";
+      console.log(`Video size: ${mediaBlob.size} bytes`);
     }
 
-    const videoBlob = await videoResponse.blob();
-    console.log(`Video size: ${videoBlob.size} bytes`);
-
     const maxSize = 25 * 1024 * 1024;
-    if (videoBlob.size > maxSize) {
+    if (mediaBlob.size > maxSize) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: `Video file is too large (${Math.round(videoBlob.size / 1024 / 1024)}MB). Maximum size is 25MB. Please use a shorter video or compress it before uploading.`
+          error: `File is too large (${Math.round(mediaBlob.size / 1024 / 1024)}MB). Maximum size is 25MB. Please use a shorter video or try again.`
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const formData = new FormData();
-    formData.append("file", videoBlob, "video.mp4");
+    formData.append("file", mediaBlob, fileName);
     formData.append("model", "whisper-1");
     formData.append("response_format", "verbose_json");
     formData.append("timestamp_granularities[]", "segment");

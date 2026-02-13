@@ -19,6 +19,7 @@ import ExportPanel from '@/components/dashboard/ExportPanel';
 import PricingModal from '@/components/dashboard/PricingModal';
 import AuthModal from '@/components/dashboard/AuthModal';
 import { extractWaveformData } from '@/components/dashboard/audioUtils';
+import { extractAudio, loadFFmpeg } from '@/utils/audioExtractor';
 
 // Helper for retrying operations
 const retryOperation = async (operation, maxRetries = 3, delay = 1000) => {
@@ -72,6 +73,7 @@ export default function Dashboard() {
   const [isUploading, setIsUploading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState('');
 
   const [videoUrl, setVideoUrl] = useState('');
   const [fileId, setFileId] = useState(null);
@@ -208,6 +210,7 @@ export default function Dashboard() {
 
     setIsUploading(true);
     setSettings(uploadSettings);
+    setProcessingStatus('Uploading video...');
 
     try {
       const fileId = `${user.id}/${Date.now()}-${file.name}`;
@@ -235,6 +238,53 @@ export default function Dashboard() {
       setFileId(fileId);
       setIsUploadModalOpen(false);
 
+      const maxDirectSize = 25 * 1024 * 1024;
+      let audioUrl = null;
+
+      if (file.size > maxDirectSize) {
+        setProcessingStatus('Extracting audio (this may take a moment)...');
+        console.log("Video too large, extracting audio with FFmpeg...");
+
+        try {
+          await loadFFmpeg((progress) => {
+            if (progress < 100) {
+              setProcessingStatus(`Loading audio processor: ${progress}%`);
+            }
+          });
+
+          setProcessingStatus('Extracting audio from video...');
+          const audioBlob = await extractAudio(file, (progress) => {
+            setProcessingStatus(`Extracting audio: ${progress}%`);
+          });
+
+          console.log(`Extracted audio size: ${audioBlob.size} bytes`);
+
+          setProcessingStatus('Uploading extracted audio...');
+          const audioFileId = `${user.id}/${Date.now()}-audio.mp3`;
+          const { error: audioUploadError } = await supabase.storage
+            .from('videos')
+            .upload(audioFileId, audioBlob, {
+              cacheControl: '3600',
+              upsert: false,
+              contentType: 'audio/mp3'
+            });
+
+          if (audioUploadError) {
+            throw new Error(`Audio upload failed: ${audioUploadError.message}`);
+          }
+
+          const { data: audioUrlData } = supabase.storage
+            .from('videos')
+            .getPublicUrl(audioFileId);
+
+          audioUrl = audioUrlData.publicUrl;
+        } catch (ffmpegError) {
+          console.error('FFmpeg extraction failed:', ffmpegError);
+          throw new Error('Video is too large (over 25MB). Audio extraction failed. Please use a shorter or smaller video.');
+        }
+      }
+
+      setProcessingStatus('Generating captions with AI...');
       console.log("Processing with Edge Function...");
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -246,7 +296,8 @@ export default function Dashboard() {
           'Authorization': `Bearer ${supabaseKey}`,
         },
         body: JSON.stringify({
-          videoUrl: videoPublicUrl,
+          videoUrl: audioUrl ? null : videoPublicUrl,
+          audioUrl: audioUrl,
           language: uploadSettings.language || 'English',
           userId: user.id
         })
@@ -284,6 +335,7 @@ export default function Dashboard() {
     } finally {
       setIsUploading(false);
       setIsGenerating(false);
+      setProcessingStatus('');
     }
   };
 
@@ -437,7 +489,7 @@ export default function Dashboard() {
         ) : isGenerating ? (
           // Generating state
           <div className="h-full flex items-center justify-center p-6">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               className="text-center"
@@ -446,10 +498,12 @@ export default function Dashboard() {
                 <Sparkles className="w-8 h-8 text-purple-400 animate-pulse" />
               </div>
               <h2 className="text-xl font-semibold text-white mb-2">
-                Generating Captions...
+                {processingStatus || 'Generating Captions...'}
               </h2>
               <p className="text-gray-500">
-                AI is analyzing your video and creating perfect captions
+                {processingStatus?.includes('audio')
+                  ? 'Processing large video file...'
+                  : 'AI is analyzing your video and creating perfect captions'}
               </p>
               <div className="mt-6 flex items-center justify-center gap-1">
                 {[0, 1, 2].map((i) => (
