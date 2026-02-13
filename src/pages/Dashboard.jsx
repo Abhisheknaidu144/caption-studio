@@ -599,9 +599,8 @@ export default function Dashboard() {
           refreshCredits();
         }}
         captions={captions}
-        fileId={fileId}
+        videoUrl={videoUrl}
         captionStyle={captionStyle}
-        userId={user?.id}
       />
 
       <PricingModal
