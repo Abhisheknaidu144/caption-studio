@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Play, Sparkles, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-export default function HeroSection() {
+export default function HeroSection({ onTryFree }) {
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-[#0a0a0a]">
       {/* Gradient orbs */}
@@ -52,9 +52,10 @@ export default function HeroSection() {
                 <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
               </Button>
             </Link>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               size="lg"
+              onClick={onTryFree}
               className="border-green-500/50 text-white bg-green-600 hover:bg-green-700 px-8 py-6 text-lg rounded-xl"
             >
               Try for Free

@@ -41,7 +41,7 @@ const plans = [
   }
 ];
 
-export default function PricingSection() {
+export default function PricingSection({ onSelectPlan }) {
   return (
     <section className="py-24 bg-[#0a0a0a] relative">
       {/* Gradient background */}
@@ -106,10 +106,11 @@ export default function PricingSection() {
               </ul>
               
               <Link to={createPageUrl('Dashboard')}>
-                <Button 
+                <Button
+                  onClick={() => onSelectPlan?.(plan.name)}
                   className={`w-full py-6 rounded-xl ${
-                    plan.popular 
-                      ? 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white' 
+                    plan.popular
+                      ? 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white'
                       : 'bg-white/10 hover:bg-white/20 text-white'
                   }`}
                 >

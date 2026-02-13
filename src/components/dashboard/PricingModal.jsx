@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from '@/components/ui/button';
-import { Check, Crown, Zap, Loader2 } from 'lucide-react';
+import { Check, Crown, Zap, Loader2, AlertCircle } from 'lucide-react';
 import { initiateRazorpayPayment } from './RazorpayPayment';
 import { base44 } from '@/api/base44Client';
 
@@ -69,7 +69,7 @@ const plans = [
   }
 ];
 
-export default function PricingModal({ isOpen, onClose, onSelectPlan, user }) {
+export default function PricingModal({ isOpen, onClose, onSelectPlan, user, reason = 'upgrade' }) {
   const [processingPlan, setProcessingPlan] = useState(null);
 
   const handlePayment = async (plan) => {
@@ -97,40 +97,47 @@ export default function PricingModal({ isOpen, onClose, onSelectPlan, user }) {
       }
 
       // For paid plans, use Razorpay
-      await initiateRazorpayPayment({
+      initiateRazorpayPayment({
         amount: plan.priceInPaise,
         planName: plan.name,
         planId: plan.id,
         userEmail: user?.email,
         userName: user?.full_name,
         onSuccess: async (paymentData) => {
-          // Update user subscription
-          const expiryDate = new Date();
-          if (plan.id === 'weekly_creator') {
-            expiryDate.setDate(expiryDate.getDate() + 7);
-          } else if (plan.id === 'monthly_pro') {
-            expiryDate.setDate(expiryDate.getDate() + 30);
+          try {
+            const expiryDate = new Date();
+            if (plan.id === 'weekly_creator') {
+              expiryDate.setDate(expiryDate.getDate() + 7);
+            } else if (plan.id === 'monthly_pro') {
+              expiryDate.setDate(expiryDate.getDate() + 30);
+            }
+
+            await base44.auth.updateMe({
+              subscription_plan: plan.id,
+              credits_remaining: plan.credits,
+              plan_expiry_date: expiryDate.toISOString(),
+              daily_usage_count: 0
+            });
+
+            alert(`✅ Payment successful! You now have ${plan.credits} credits.`);
+            setProcessingPlan(null);
+            onSelectPlan(plan.id);
+            onClose();
+            window.location.reload();
+          } catch (error) {
+            console.error('Error updating subscription:', error);
+            alert('Payment received but failed to update subscription. Please contact support.');
+            setProcessingPlan(null);
           }
-
-          await base44.auth.updateMe({
-            subscription_plan: plan.id,
-            credits_remaining: plan.credits,
-            plan_expiry_date: expiryDate.toISOString(),
-            daily_usage_count: 0
-          });
-
-          alert(`✅ Payment successful! You now have ${plan.credits} credits.`);
-          setProcessingPlan(null);
-          onSelectPlan(plan.id);
-          onClose();
-          window.location.reload();
         },
         onFailure: (error) => {
-          alert(`❌ Payment failed: ${error}`);
+          console.error('Payment failed:', error);
+          alert(`❌ Payment ${error || 'cancelled'}`);
           setProcessingPlan(null);
         }
       });
     } catch (error) {
+      console.error('Error initiating payment:', error);
       alert(`Error: ${error.message}`);
       setProcessingPlan(null);
     }
@@ -146,8 +153,20 @@ export default function PricingModal({ isOpen, onClose, onSelectPlan, user }) {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid md:grid-cols-3 gap-6 mt-6">
-          {plans.map(plan => (
+        {reason === 'credits_exhausted' && (
+          <div className="mt-6 p-4 rounded-lg bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-500/30 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-white font-semibold mb-1">You've reached your free limit</p>
+              <p className="text-gray-300 text-sm">
+                To continue creating videos, upgrade your plan and get more credits.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className={`grid ${reason === 'credits_exhausted' ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-6 mt-6`}>
+          {plans.filter(plan => reason !== 'credits_exhausted' || plan.id !== 'free_plan').map(plan => (
             <div
               key={plan.id}
               className={`relative rounded-xl border ${

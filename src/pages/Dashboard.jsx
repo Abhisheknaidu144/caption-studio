@@ -65,6 +65,7 @@ const defaultCaptionStyle = {
 export default function Dashboard() {
   const { user, credits, subscriptionPlan, refreshCredits, isLoading: isAuthLoading } = useAuth();
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
+  const [pricingModalReason, setPricingModalReason] = useState('upgrade');
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isExportPanelOpen, setIsExportPanelOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -196,6 +197,7 @@ export default function Dashboard() {
     }
 
     if (credits < 1 && subscriptionPlan === 'free') {
+      setPricingModalReason('credits_exhausted');
       setIsPricingModalOpen(true);
       return;
     }
@@ -457,7 +459,10 @@ export default function Dashboard() {
               activeTab={activeTab} 
               setActiveTab={setActiveTab} 
               user={user}
-              onOpenPricing={() => setIsPricingModalOpen(true)}
+              onOpenPricing={() => {
+                setPricingModalReason('upgrade');
+                setIsPricingModalOpen(true);
+              }}
             />
 
             {/* Left Panel - Content based on active tab */}
@@ -580,6 +585,7 @@ export default function Dashboard() {
         onClose={() => setIsPricingModalOpen(false)}
         onSelectPlan={handleSelectPlan}
         user={user}
+        reason={pricingModalReason}
       />
 
       <AuthModal
