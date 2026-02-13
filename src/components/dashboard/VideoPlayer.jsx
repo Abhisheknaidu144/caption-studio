@@ -591,11 +591,15 @@ export default function VideoPlayer({
               ref={videoRef}
               src={videoUrl}
               className="w-full h-full object-contain"
+              crossOrigin="anonymous"
+              playsInline
+              preload="auto"
               onTimeUpdate={handleTimeUpdate}
               onLoadedMetadata={handleLoadedMetadata}
               onEnded={() => setIsPlaying(false)}
               onPlay={() => setIsPlaying(true)}
               onPause={() => setIsPlaying(false)}
+              onError={(e) => console.error('Video load error:', e.target.error)}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-zinc-900/50">

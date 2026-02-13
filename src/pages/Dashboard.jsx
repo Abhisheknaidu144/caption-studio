@@ -626,6 +626,9 @@ export default function Dashboard() {
         captions={captions}
         videoUrl={videoUrl}
         captionStyle={captionStyle}
+        fileId={fileId}
+        userId={user?.id}
+        onCreditsUpdate={refreshCredits}
       />
 
       <PricingModal
