@@ -16,11 +16,9 @@ export const loadFFmpeg = async (onProgress) => {
   loadPromise = (async () => {
     try {
       const { FFmpeg } = await import('https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js');
-      const { fetchFile, toBlobURL } = await import('https://unpkg.com/@ffmpeg/util@0.12.1/dist/esm/index.js');
+      const { toBlobURL } = await import('https://unpkg.com/@ffmpeg/util@0.12.1/dist/esm/index.js');
 
       ffmpeg = new FFmpeg();
-      ffmpeg._fetchFile = fetchFile;
-      ffmpeg._toBlobURL = toBlobURL;
 
       ffmpeg.on('progress', ({ progress }) => {
         if (onProgress) {
@@ -28,11 +26,30 @@ export const loadFFmpeg = async (onProgress) => {
         }
       });
 
-      const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
-      await ffmpeg.load({
-        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-      });
+      const baseURL = 'https://unpkg.com/@ffmpeg/core-mt@0.12.6/dist/esm';
+
+      let coreLoaded = false;
+
+      try {
+        if (typeof SharedArrayBuffer !== 'undefined') {
+          await ffmpeg.load({
+            coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+            wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+            workerURL: await toBlobURL(`${baseURL}/ffmpeg-core.worker.js`, 'text/javascript'),
+          });
+          coreLoaded = true;
+        }
+      } catch (mtError) {
+        console.log('Multi-threaded FFmpeg not available, trying single-threaded...');
+      }
+
+      if (!coreLoaded) {
+        const stBaseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
+        await ffmpeg.load({
+          coreURL: await toBlobURL(`${stBaseURL}/ffmpeg-core.js`, 'text/javascript'),
+          wasmURL: await toBlobURL(`${stBaseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+        });
+      }
 
       return ffmpeg;
     } catch (error) {

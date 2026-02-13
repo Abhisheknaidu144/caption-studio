@@ -280,7 +280,8 @@ export default function Dashboard() {
           audioUrl = audioUrlData.publicUrl;
         } catch (ffmpegError) {
           console.error('FFmpeg extraction failed:', ffmpegError);
-          throw new Error('Video is too large (over 25MB). Audio extraction failed. Please use a shorter or smaller video.');
+          const errorMsg = ffmpegError.message || 'Unknown error';
+          throw new Error(`Audio extraction failed: ${errorMsg}. For large videos (over 25MB), please try a shorter video or compress the file.`);
         }
       }
 
