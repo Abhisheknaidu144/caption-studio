@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/lib/SupabaseAuthContext';
 
-export default function AuthModal({ open, onClose }) {
+export default function AuthModal({ open, onClose, onAuthSuccess }) {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -26,7 +26,12 @@ export default function AuthModal({ open, onClose }) {
         await signUp(email, password);
         alert('Account created! Please check your email to verify (or you can login directly in development).');
       }
-      onClose();
+
+      if (onAuthSuccess) {
+        onAuthSuccess();
+      } else {
+        onClose();
+      }
     } catch (err) {
       setError(err.message || 'Authentication failed. Please try again.');
     } finally {

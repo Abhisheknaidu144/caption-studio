@@ -196,7 +196,12 @@ export default function Dashboard() {
       return;
     }
 
-    if (credits < 1 && subscriptionPlan === 'free') {
+    if (isAuthLoading) {
+      alert('Please wait while we load your account details...');
+      return;
+    }
+
+    if (credits < 1) {
       setPricingModalReason('credits_exhausted');
       setIsPricingModalOpen(true);
       return;

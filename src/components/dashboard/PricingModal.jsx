@@ -69,7 +69,7 @@ const plans = [
   }
 ];
 
-export default function PricingModal({ isOpen, onClose, onSelectPlan, user, reason = 'upgrade' }) {
+export default function PricingModal({ isOpen, onClose, onSelectPlan, user, reason = 'upgrade', autoSelectPlanId = null }) {
   const [processingPlan, setProcessingPlan] = useState(null);
 
   const mapPlanIdToDbValue = (planId) => {
@@ -80,6 +80,17 @@ export default function PricingModal({ isOpen, onClose, onSelectPlan, user, reas
     };
     return mapping[planId] || 'free';
   };
+
+  React.useEffect(() => {
+    if (isOpen && autoSelectPlanId && user) {
+      const plan = plans.find(p => p.id === autoSelectPlanId);
+      if (plan) {
+        setTimeout(() => {
+          handlePayment(plan);
+        }, 500);
+      }
+    }
+  }, [isOpen, autoSelectPlanId, user]);
 
   const handlePayment = async (plan) => {
     setProcessingPlan(plan.id);

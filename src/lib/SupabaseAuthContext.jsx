@@ -28,7 +28,7 @@ export const AuthProvider = ({ children }) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchUserProfile(session.user.id);
+        fetchUserProfile(session.user.id, session.user.email);
       } else {
         setIsLoading(false);
       }
@@ -40,14 +40,14 @@ export const AuthProvider = ({ children }) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchUserProfile(session.user.id);
+        fetchUserProfile(session.user.id, session.user.email);
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchUserProfile = async (userId) => {
+  const fetchUserProfile = async (userId, userEmail) => {
     try {
       const { data, error } = await supabase
         .from('user_profiles')
@@ -68,7 +68,7 @@ export const AuthProvider = ({ children }) => {
           .insert([
             {
               id: userId,
-              email: user?.email,
+              email: userEmail,
               credits_remaining: 3,
               subscription_plan: 'free',
             },
