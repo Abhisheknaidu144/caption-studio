@@ -19,10 +19,10 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { videoUrl, language = "English", userId } = await req.json();
+    const { audioUrl, language = "English", userId } = await req.json();
 
-    if (!videoUrl) {
-      return jsonResponse({ success: false, error: "Video URL is required" }, 400);
+    if (!audioUrl) {
+      return jsonResponse({ success: false, error: "Audio URL is required" }, 400);
     }
 
     const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
@@ -30,42 +30,32 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ success: false, error: "OpenAI API key not configured" }, 500);
     }
 
-    console.log(`Downloading video from: ${videoUrl}`);
-    const videoResponse = await fetch(videoUrl);
-    if (!videoResponse.ok) {
-      throw new Error(`Failed to download video: ${videoResponse.status}`);
+    console.log(`Downloading audio from: ${audioUrl}`);
+    const audioResponse = await fetch(audioUrl);
+    if (!audioResponse.ok) {
+      throw new Error(`Failed to download audio: ${audioResponse.status}`);
     }
 
-    const videoArrayBuffer = await videoResponse.arrayBuffer();
-    const videoSize = videoArrayBuffer.byteLength;
-    console.log(`Video downloaded: ${videoSize} bytes`);
+    const audioArrayBuffer = await audioResponse.arrayBuffer();
+    const audioSize = audioArrayBuffer.byteLength;
+    console.log(`Audio downloaded: ${audioSize} bytes`);
 
     const maxSize = 25 * 1024 * 1024;
-    if (videoSize > maxSize) {
+    if (audioSize > maxSize) {
       return jsonResponse({
         success: false,
-        error: `File is too large (${Math.round(videoSize / 1024 / 1024)}MB). Maximum is 25MB.`
+        error: `Audio file is too large (${Math.round(audioSize / 1024 / 1024)}MB). Maximum is 25MB.`
       }, 400);
     }
 
-    const urlLower = videoUrl.toLowerCase();
-    let ext = "mp4";
-    let mimeType = "video/mp4";
-    if (urlLower.includes(".webm")) { ext = "webm"; mimeType = "video/webm"; }
-    else if (urlLower.includes(".mov")) { ext = "mov"; mimeType = "video/quicktime"; }
-    else if (urlLower.includes(".avi")) { ext = "avi"; mimeType = "video/x-msvideo"; }
-    else if (urlLower.includes(".mp3")) { ext = "mp3"; mimeType = "audio/mpeg"; }
-    else if (urlLower.includes(".wav")) { ext = "wav"; mimeType = "audio/wav"; }
-    else if (urlLower.includes(".m4a")) { ext = "m4a"; mimeType = "audio/mp4"; }
-
-    const blob = new Blob([videoArrayBuffer], { type: mimeType });
+    const audioBlob = new Blob([audioArrayBuffer], { type: "audio/wav" });
     const formData = new FormData();
-    formData.append("file", blob, `video.${ext}`);
+    formData.append("file", audioBlob, "audio.wav");
     formData.append("model", "whisper-1");
     formData.append("response_format", "verbose_json");
     formData.append("timestamp_granularities[]", "segment");
 
-    console.log(`Sending to Whisper: type=${mimeType}, ext=${ext}, size=${videoSize}`);
+    console.log(`Sending WAV audio to Whisper: size=${audioSize}`);
     const whisperResponse = await fetch("https://api.openai.com/v1/audio/transcriptions", {
       method: "POST",
       headers: { "Authorization": `Bearer ${openaiApiKey}` },
@@ -79,7 +69,7 @@ Deno.serve(async (req: Request) => {
       try {
         const errorJson = JSON.parse(errorText);
         if (errorJson.error?.message) errorMessage = errorJson.error.message;
-      } catch { /* use default */ }
+      } catch (_) { /* use default */ }
       throw new Error(errorMessage);
     }
 
@@ -131,14 +121,8 @@ Deno.serve(async (req: Request) => {
 
         const words = text.split(/\s+/);
         const duration = end - start;
-        const wordsPerMinute = duration > 0 ? (words.length / duration) * 60 : 0;
 
-        let wordsPerCaption = Math.min(3, words.length);
-        if (wordsPerMinute > 180 || words.length > 5) {
-          wordsPerCaption = Math.min(5, Math.max(3, Math.floor(words.length / 2)));
-        } else if (wordsPerMinute < 60 && words.length === 1) {
-          wordsPerCaption = 1;
-        }
+        const wordsPerCaption = Math.min(4, Math.max(2, Math.ceil(words.length / 2)));
 
         if (words.length <= wordsPerCaption) {
           captions.push({
@@ -181,7 +165,7 @@ Deno.serve(async (req: Request) => {
     console.error("Error:", error);
     return jsonResponse({
       success: false,
-      error: error.message || "Failed to transcribe video"
+      error: error.message || "Failed to transcribe audio"
     }, 500);
   }
 });

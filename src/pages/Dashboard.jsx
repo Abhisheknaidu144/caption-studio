@@ -19,7 +19,7 @@ import ExportPanel from '@/components/dashboard/ExportPanel';
 import PricingModal from '@/components/dashboard/PricingModal';
 import AuthModal from '@/components/dashboard/AuthModal';
 import { extractWaveformData } from '@/components/dashboard/audioUtils';
-import { extractAudio, loadFFmpeg } from '@/utils/audioExtractor';
+import { extractAudioFromVideo } from '@/utils/audioExtractor';
 
 // Helper for retrying operations
 const retryOperation = async (operation, maxRetries = 3, delay = 1000) => {
@@ -243,6 +243,31 @@ export default function Dashboard() {
         throw new Error(`Video is too large (${Math.round(file.size / 1024 / 1024)}MB). Maximum size is 25MB. Please use a shorter or compressed video.`);
       }
 
+      setProcessingStatus('Extracting audio from video...');
+      console.log("Extracting audio client-side...");
+      const audioBlob = await extractAudioFromVideo(file);
+      console.log(`Audio extracted: ${audioBlob.size} bytes`);
+
+      setProcessingStatus('Uploading audio...');
+      const audioFileId = `${user.id}/${Date.now()}-audio.wav`;
+      const { error: audioUploadError } = await supabase.storage
+        .from('videos')
+        .upload(audioFileId, audioBlob, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: 'audio/wav'
+        });
+
+      if (audioUploadError) {
+        throw new Error(`Audio upload failed: ${audioUploadError.message}`);
+      }
+
+      const { data: audioUrlData } = supabase.storage
+        .from('videos')
+        .getPublicUrl(audioFileId);
+
+      const audioPublicUrl = audioUrlData.publicUrl;
+
       setProcessingStatus('Generating captions with AI...');
       console.log("Processing with Edge Function...");
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -255,7 +280,7 @@ export default function Dashboard() {
           'Authorization': `Bearer ${supabaseKey}`,
         },
         body: JSON.stringify({
-          videoUrl: videoPublicUrl,
+          audioUrl: audioPublicUrl,
           language: uploadSettings.language || 'English',
           userId: user.id
         })

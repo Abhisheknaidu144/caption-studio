@@ -1,111 +1,95 @@
-let ffmpeg = null;
-let isLoading = false;
-let loadPromise = null;
+export const extractAudioFromVideo = async (videoFile, onProgress) => {
+  if (onProgress) onProgress(10);
 
-export const loadFFmpeg = async (onProgress) => {
-  if (ffmpeg && ffmpeg.loaded) {
-    return ffmpeg;
-  }
+  const arrayBuffer = await videoFile.arrayBuffer();
+  if (onProgress) onProgress(20);
 
-  if (isLoading && loadPromise) {
-    return loadPromise;
-  }
+  const audioContext = new (window.AudioContext || window.webkitAudioContext)({
+    sampleRate: 16000
+  });
 
-  isLoading = true;
+  if (onProgress) onProgress(30);
 
-  loadPromise = (async () => {
-    try {
-      const { FFmpeg } = await import('https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js');
-      const { toBlobURL } = await import('https://unpkg.com/@ffmpeg/util@0.12.1/dist/esm/index.js');
+  const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+  if (onProgress) onProgress(60);
 
-      ffmpeg = new FFmpeg();
+  const numberOfChannels = 1;
+  const sampleRate = 16000;
+  const offlineCtx = new OfflineAudioContext(numberOfChannels, audioBuffer.duration * sampleRate, sampleRate);
+  const source = offlineCtx.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(offlineCtx.destination);
+  source.start(0);
 
-      ffmpeg.on('progress', ({ progress }) => {
-        if (onProgress) {
-          onProgress(Math.round(progress * 100));
-        }
-      });
+  const renderedBuffer = await offlineCtx.startRendering();
+  if (onProgress) onProgress(80);
 
-      const baseURL = 'https://unpkg.com/@ffmpeg/core-mt@0.12.6/dist/esm';
+  const wavBlob = audioBufferToWav(renderedBuffer);
+  if (onProgress) onProgress(100);
 
-      let coreLoaded = false;
-
-      try {
-        if (typeof SharedArrayBuffer !== 'undefined') {
-          await ffmpeg.load({
-            coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-            wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-            workerURL: await toBlobURL(`${baseURL}/ffmpeg-core.worker.js`, 'text/javascript'),
-          });
-          coreLoaded = true;
-        }
-      } catch (mtError) {
-        console.log('Multi-threaded FFmpeg not available, trying single-threaded...');
-      }
-
-      if (!coreLoaded) {
-        const stBaseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
-        await ffmpeg.load({
-          coreURL: await toBlobURL(`${stBaseURL}/ffmpeg-core.js`, 'text/javascript'),
-          wasmURL: await toBlobURL(`${stBaseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-        });
-      }
-
-      return ffmpeg;
-    } catch (error) {
-      console.error('Failed to load FFmpeg:', error);
-      ffmpeg = null;
-      throw error;
-    } finally {
-      isLoading = false;
-    }
-  })();
-
-  return loadPromise;
+  audioContext.close();
+  return wavBlob;
 };
 
-export const extractAudio = async (videoFile, onProgress) => {
-  const ff = await loadFFmpeg(onProgress);
+function audioBufferToWav(buffer) {
+  const numChannels = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const format = 1;
+  const bitDepth = 16;
 
-  const inputName = 'input.mp4';
-  const outputName = 'output.wav';
+  const bytesPerSample = bitDepth / 8;
+  const blockAlign = numChannels * bytesPerSample;
+  const numSamples = buffer.length;
+  const dataSize = numSamples * blockAlign;
+  const headerSize = 44;
+  const totalSize = headerSize + dataSize;
 
-  const fileData = await videoFile.arrayBuffer();
-  await ff.writeFile(inputName, new Uint8Array(fileData));
+  const arrayBuffer = new ArrayBuffer(totalSize);
+  const view = new DataView(arrayBuffer);
 
-  await ff.exec([
-    '-i', inputName,
-    '-vn',
-    '-acodec', 'pcm_s16le',
-    '-ar', '16000',
-    '-ac', '1',
-    outputName
-  ]);
+  writeString(view, 0, 'RIFF');
+  view.setUint32(4, totalSize - 8, true);
+  writeString(view, 8, 'WAVE');
+  writeString(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, format, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitDepth, true);
+  writeString(view, 36, 'data');
+  view.setUint32(40, dataSize, true);
 
-  const data = await ff.readFile(outputName);
-  const audioBlob = new Blob([data.buffer], { type: 'audio/wav' });
+  const channelData = buffer.getChannelData(0);
+  let offset = 44;
+  for (let i = 0; i < numSamples; i++) {
+    const sample = Math.max(-1, Math.min(1, channelData[i]));
+    view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+    offset += 2;
+  }
 
-  await ff.deleteFile(inputName);
-  await ff.deleteFile(outputName);
+  return new Blob([arrayBuffer], { type: 'audio/wav' });
+}
 
-  return audioBlob;
-};
+function writeString(view, offset, string) {
+  for (let i = 0; i < string.length; i++) {
+    view.setUint8(offset + i, string.charCodeAt(i));
+  }
+}
 
 export const getVideoDuration = async (videoFile) => {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video');
     video.preload = 'metadata';
-
     video.onloadedmetadata = () => {
       URL.revokeObjectURL(video.src);
       resolve(video.duration);
     };
-
     video.onerror = () => {
       URL.revokeObjectURL(video.src);
       reject(new Error('Failed to load video metadata'));
     };
-
     video.src = URL.createObjectURL(videoFile);
   });
 };
