@@ -5,7 +5,7 @@ import { Download, FileText, Copy, Check, FileJson, Sparkles, Video } from 'luci
 import { motion } from 'framer-motion';
 import { Progress } from "@/components/ui/progress";
 
-export default function ExportPanel({ open, onClose, captions, fileId, captionStyle }) {
+export default function ExportPanel({ open, onClose, captions, fileId, captionStyle, userId }) {
   const [copied, setCopied] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -67,8 +67,13 @@ export default function ExportPanel({ open, onClose, captions, fileId, captionSt
       return;
     }
 
+    if (!userId) {
+      alert("Please log in to export videos.");
+      return;
+    }
+
     setIsExporting(true);
-    setProgress(10); 
+    setProgress(10);
     setStatusMessage('Initializing Render Engine...');
 
     try {
@@ -79,12 +84,19 @@ export default function ExportPanel({ open, onClose, captions, fileId, captionSt
         body: JSON.stringify({
           file_id: fileId,
           captions: captions,
-          // ✅ CRITICAL: Send the style object so the backend knows fonts/colors
-          style: captionStyle || {} 
+          style: captionStyle || {},
+          user_id: userId,
+          export_quality: quality
         })
       });
 
       if (!response.ok) {
+        if (response.status === 402) {
+          const errorData = await response.json();
+          alert(errorData.detail || 'Insufficient credits. Please purchase more credits.');
+          setIsExporting(false);
+          return;
+        }
         throw new Error('Server connection failed');
       }
 

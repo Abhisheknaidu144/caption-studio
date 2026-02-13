@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Loader2, Upload, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/lib/SupabaseAuthContext';
 
 // UI Components
 import DashboardHeader from '@/components/dashboard/DashboardHeader';
@@ -61,7 +62,7 @@ const defaultCaptionStyle = {
 };
 
 export default function Dashboard() {
-  const [user, setUser] = useState({ id: 'guest', email: 'guest@captionstudio.io', plan: 'pro', credits: 30 });
+  const { user, credits, subscriptionPlan, refreshCredits, isLoading: isAuthLoading } = useAuth();
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isExportPanelOpen, setIsExportPanelOpen] = useState(false);
@@ -186,6 +187,16 @@ export default function Dashboard() {
 
   // --- MODIFIED UPLOAD HANDLER (PYTHON BACKEND) ---
   const handleUpload = async (file, uploadSettings) => {
+    if (!user) {
+      alert('Please log in to upload videos');
+      return;
+    }
+
+    if (credits < 1 && subscriptionPlan === 'free') {
+      setIsPricingModalOpen(true);
+      return;
+    }
+
     setIsUploading(true);
     setSettings(uploadSettings);
 
@@ -211,13 +222,13 @@ export default function Dashboard() {
       // 2. Generate captions using Python Backend (Whisper + GPT)
       console.log("Processing with /api/process...");
 
-      // ✅ FIX: Send correct payload to new /api/process endpoint
       const processRes = await fetch('/api/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           file_id: uploadData.file_id,
-          language: uploadSettings.language || 'English' // Send Language!
+          language: uploadSettings.language || 'English',
+          user_id: user.id
         })
       });
 
@@ -237,10 +248,16 @@ export default function Dashboard() {
       }));
       setCaptions(generatedCaptions);
 
+      // Store target language in caption style for export
+      setCaptionStyle(prev => ({
+        ...prev,
+        target_language: uploadSettings.language || 'English'
+      }));
+
       // Save initial history
-      setHistory([{ 
-        captions: JSON.parse(JSON.stringify(generatedCaptions)), 
-        captionStyle: JSON.parse(JSON.stringify(captionStyle)) 
+      setHistory([{
+        captions: JSON.parse(JSON.stringify(generatedCaptions)),
+        captionStyle: JSON.parse(JSON.stringify(captionStyle))
       }]);
       setHistoryIndex(0);
 
@@ -544,11 +561,14 @@ export default function Dashboard() {
 
       <ExportPanel
         open={isExportPanelOpen}
-        onClose={() => setIsExportPanelOpen(false)}
+        onClose={() => {
+          setIsExportPanelOpen(false);
+          refreshCredits();
+        }}
         captions={captions}
         fileId={fileId}
-        // ✅ CRITICAL FIX: Passing existing captionStyle so backend knows what colors/fonts to use
         captionStyle={captionStyle}
+        userId={user?.id}
       />
 
       <PricingModal

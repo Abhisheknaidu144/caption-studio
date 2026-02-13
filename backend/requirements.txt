@@ -1,7 +1,10 @@
 fastapi
-uvicorn
+uvicorn[standard]
 python-multipart
 openai
 pydantic
 aiofiles
 razorpay
+supabase
+python-dotenv
+httpx
