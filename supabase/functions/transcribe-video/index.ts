@@ -53,6 +53,7 @@ Deno.serve(async (req: Request) => {
     formData.append("file", audioBlob, "audio.wav");
     formData.append("model", "whisper-1");
     formData.append("response_format", "verbose_json");
+    formData.append("timestamp_granularities[]", "word");
     formData.append("timestamp_granularities[]", "segment");
 
     console.log(`Sending WAV audio to Whisper: size=${audioSize}`);
@@ -78,7 +79,59 @@ Deno.serve(async (req: Request) => {
 
     const captions: Array<{id: string; text: string; start_time: number; end_time: number}> = [];
 
-    if (transcription.segments && transcription.segments.length > 0) {
+    if (transcription.words && transcription.words.length > 0) {
+      const words = transcription.words;
+      const wordsPerCaption = 3;
+
+      for (let i = 0; i < words.length; i += wordsPerCaption) {
+        const captionWords = words.slice(i, i + wordsPerCaption);
+        if (captionWords.length === 0) continue;
+
+        let captionText = captionWords.map((w: any) => w.word).join(" ");
+        const captionStart = captionWords[0].start;
+        const captionEnd = captionWords[captionWords.length - 1].end;
+
+        if (language.toLowerCase() !== "english") {
+          try {
+            const translationRes = await fetch("https://api.openai.com/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${openaiApiKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                model: "gpt-4o",
+                messages: [
+                  {
+                    role: "system",
+                    content: `You are a professional subtitle translator specializing in ${language}. Translate the following English text to ${language}. For regional Indian languages (Hindi, Tamil, Telugu, Bengali, Marathi, Punjabi, Gujarati, Kannada, Malayalam, Odia, Urdu), use natural, conversational language that matches the speaking style. Keep translations concise and subtitle-friendly (max 2 lines). Preserve the emotional tone and cultural context. Return ONLY the translated text without quotes, explanations, or meta-commentary.`
+                  },
+                  { role: "user", content: captionText }
+                ],
+                temperature: 0.3
+              }),
+            });
+
+            if (translationRes.ok) {
+              const translationData = await translationRes.json();
+              const translated = translationData.choices?.[0]?.message?.content?.trim();
+              if (translated) {
+                captionText = translated.replace(/^["']|["']$/g, "");
+              }
+            }
+          } catch (e) {
+            console.error("Translation error:", e);
+          }
+        }
+
+        captions.push({
+          id: `${Date.now()}-${i}`,
+          text: captionText.trim(),
+          start_time: captionStart,
+          end_time: captionEnd
+        });
+      }
+    } else if (transcription.segments && transcription.segments.length > 0) {
       for (const seg of transcription.segments) {
         let text = (seg.text || "").trim();
         if (!text) continue;
@@ -121,7 +174,6 @@ Deno.serve(async (req: Request) => {
 
         const words = text.split(/\s+/);
         const duration = end - start;
-
         const wordsPerCaption = Math.min(4, Math.max(2, Math.ceil(words.length / 2)));
 
         if (words.length <= wordsPerCaption) {
