@@ -131,31 +131,31 @@ export default function DashboardHeader({
         </Button>
         
         {hasCaptions && (
-          <>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onSaveClick}
-              disabled={isSaving}
-              className="text-gray-400 hover:text-white"
-            >
-              {isSaving ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <Save className="w-4 h-4 sm:mr-2" />
-              )}
-              <span className="hidden sm:inline">Save</span>
-            </Button>
-            
-            <Button
-              onClick={onExportClick}
-              size="sm"
-              className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white"
-            >
-              <Download className="w-4 h-4 sm:mr-2" />
-              <span className="hidden sm:inline">Export</span>
-            </Button>
-          </>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onSaveClick}
+            disabled={isSaving}
+            className="text-gray-400 hover:text-white"
+          >
+            {isSaving ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4 sm:mr-2" />
+            )}
+            <span className="hidden sm:inline">Save</span>
+          </Button>
+        )}
+
+        {hasVideo && (
+          <Button
+            onClick={onExportClick}
+            size="sm"
+            className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white"
+          >
+            <Download className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Export</span>
+          </Button>
         )}
 
       </div>

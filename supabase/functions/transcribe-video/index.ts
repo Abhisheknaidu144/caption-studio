@@ -53,6 +53,17 @@ Deno.serve(async (req: Request) => {
     const videoBlob = await videoResponse.blob();
     console.log(`Video size: ${videoBlob.size} bytes`);
 
+    const maxSize = 25 * 1024 * 1024;
+    if (videoBlob.size > maxSize) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: `Video file is too large (${Math.round(videoBlob.size / 1024 / 1024)}MB). Maximum size is 25MB. Please use a shorter video or compress it before uploading.`
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const formData = new FormData();
     formData.append("file", videoBlob, "video.mp4");
     formData.append("model", "whisper-1");
