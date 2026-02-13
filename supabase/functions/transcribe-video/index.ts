@@ -54,7 +54,7 @@ Deno.serve(async (req: Request) => {
         throw new Error(`Failed to download audio: ${audioResponse.status}`);
       }
       mediaBlob = await audioResponse.blob();
-      fileName = "audio.mp3";
+      fileName = "audio.wav";
       console.log(`Audio size: ${mediaBlob.size} bytes`);
     } else {
       console.log(`Downloading video from: ${videoUrl}`);

@@ -68,7 +68,7 @@ export const extractAudio = async (videoFile, onProgress) => {
   const ff = await loadFFmpeg(onProgress);
 
   const inputName = 'input.mp4';
-  const outputName = 'output.mp3';
+  const outputName = 'output.wav';
 
   const fileData = await videoFile.arrayBuffer();
   await ff.writeFile(inputName, new Uint8Array(fileData));
@@ -76,15 +76,14 @@ export const extractAudio = async (videoFile, onProgress) => {
   await ff.exec([
     '-i', inputName,
     '-vn',
-    '-acodec', 'libmp3lame',
-    '-b:a', '64k',
+    '-acodec', 'pcm_s16le',
     '-ar', '16000',
     '-ac', '1',
     outputName
   ]);
 
   const data = await ff.readFile(outputName);
-  const audioBlob = new Blob([data.buffer], { type: 'audio/mp3' });
+  const audioBlob = new Blob([data.buffer], { type: 'audio/wav' });
 
   await ff.deleteFile(inputName);
   await ff.deleteFile(outputName);

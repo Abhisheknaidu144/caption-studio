@@ -260,13 +260,13 @@ export default function Dashboard() {
           console.log(`Extracted audio size: ${audioBlob.size} bytes`);
 
           setProcessingStatus('Uploading extracted audio...');
-          const audioFileId = `${user.id}/${Date.now()}-audio.mp3`;
+          const audioFileId = `${user.id}/${Date.now()}-audio.wav`;
           const { error: audioUploadError } = await supabase.storage
             .from('videos')
             .upload(audioFileId, audioBlob, {
               cacheControl: '3600',
               upsert: false,
-              contentType: 'audio/mp3'
+              contentType: 'audio/wav'
             });
 
           if (audioUploadError) {
