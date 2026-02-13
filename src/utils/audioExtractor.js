@@ -1,6 +1,3 @@
-import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { fetchFile, toBlobURL } from '@ffmpeg/util';
-
 let ffmpeg = null;
 let isLoading = false;
 let loadPromise = null;
@@ -18,7 +15,12 @@ export const loadFFmpeg = async (onProgress) => {
 
   loadPromise = (async () => {
     try {
+      const { FFmpeg } = await import('https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js');
+      const { fetchFile, toBlobURL } = await import('https://unpkg.com/@ffmpeg/util@0.12.1/dist/esm/index.js');
+
       ffmpeg = new FFmpeg();
+      ffmpeg._fetchFile = fetchFile;
+      ffmpeg._toBlobURL = toBlobURL;
 
       ffmpeg.on('progress', ({ progress }) => {
         if (onProgress) {
@@ -51,7 +53,8 @@ export const extractAudio = async (videoFile, onProgress) => {
   const inputName = 'input.mp4';
   const outputName = 'output.mp3';
 
-  await ff.writeFile(inputName, await fetchFile(videoFile));
+  const fileData = await videoFile.arrayBuffer();
+  await ff.writeFile(inputName, new Uint8Array(fileData));
 
   await ff.exec([
     '-i', inputName,
